@@ -79,6 +79,7 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker
+      - gcloud-authenticate
       - run:
           name: Tag and Push API docker image
           command: |
