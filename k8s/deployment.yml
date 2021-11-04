@@ -1,0 +1,24 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-${CIRCLE_PROJECT_REPONAME}-api
+  labels:
+    app: service-${CIRCLE_PROJECT_REPONAME}-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: service-${CIRCLE_PROJECT_REPONAME}-api
+  template:
+    metadata:
+      labels:
+        app: service-${CIRCLE_PROJECT_REPONAME}-api
+    spec:
+      containers:
+        - name: service-${CIRCLE_PROJECT_REPONAME}-api
+          image: gcr.io/${K8S_GOOGLE_PROJECT_ID}/service-${CIRCLE_PROJECT_REPONAME}-api:${CIRCLE_SHA1}
+          envFrom:
+            - secretRef:
+                name: email-validity-secret
+      restartPolicy: Always

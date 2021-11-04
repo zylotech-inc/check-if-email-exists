@@ -1,0 +1,26 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-${CIRCLE_PROJECT_REPONAME}-api
+  labels:
+    service: service-${CIRCLE_PROJECT_REPONAME}-api
+  annotations:
+    getambassador.io/config: |
+      ---
+      apiVersion: ambassador/v1
+      kind: Mapping
+      name: service-${CIRCLE_PROJECT_REPONAME}-api
+      prefix: /email-validator/
+      service: http://service-${CIRCLE_PROJECT_REPONAME}-api
+      timeout_ms: 180000
+      # the default idle_timeout_ms
+      idle_timeout_ms: 300000
+      connect_timeout_ms: 180000
+
+spec:
+  selector:
+    app: service-${CIRCLE_PROJECT_REPONAME}-api
+  ports:
+    - port: 80
+      targetPort: 8080

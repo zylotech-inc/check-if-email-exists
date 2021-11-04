@@ -1,0 +1,157 @@
+---
+version: 2.1
+
+orbs:
+  gcp-cli: circleci/gcp-cli@1.8.3
+
+commands:
+  # Our generic GCP Authentication Command
+  # We base64 encode the GCP KEY to prevent some weirdness in CirclCI storing string
+  # representations of JSON objects
+  gcloud-authenticate:
+    description: Authenticate docker with google cloud
+    steps:
+      - run: echo ${K8S_GCP_PROJECT_KEY} | base64 --decode --ignore-garbage > ${HOME}/gcp-key.json
+      #- run: echo "export NOBASE64_K8S_GCP_PROJECT_KEY=$(echo $K8S_GCP_PROJECT_KEY | base64 --decode --ignore-garbage)" >> "$BASH_ENV"
+      - run: gcloud auth activate-service-account --key-file=${HOME}/gcp-key.json
+      - run: gcloud --quiet config set project ${K8S_GOOGLE_PROJECT_ID}
+      - run: gcloud auth configure-docker
+
+  # Deploy to Kubernetes Cluster
+  deploy-api-k8s:
+    description: Deploy to k8s cluster
+    parameters:
+      cluster_name:
+        type: string
+    steps:
+      - run: apt-get install -qq -y gettext
+      - run: gcloud --quiet config set compute/zone ${K8S_GOOGLE_COMPUTE_ZONE}
+      - run: gcloud --quiet container clusters get-credentials << parameters.cluster_name >>
+      - run:
+          name: insert env variables into k8s yaml configs
+          command: |
+            mkdir -p k8s-output
+            for file in $(ls k8s)
+            do
+              envsubst < ./k8s/"$file" > ./k8s-output/"$file"
+            done
+      - run:
+          name: kubectl apply
+          command: |
+            kubectl apply -f k8s-output
+      - run:
+          name: kubectl rollout status
+          command: |
+            kubectl rollout status deployment/${CIRCLE_PROJECT_REPONAME}-api
+
+  # GCP Infractructure Specific Environment Variables
+  set-infrastructure-env:
+    description: set env vars for deployment based on the branch
+    steps:
+      - run:
+          name: set the cluster to deploy
+          command: |
+            case "$CIRCLE_BRANCH" in
+              dev|develop)
+                echo "export CLUSTER_NAME='${K8S_CLUSTER_NAME_DEV}'" >> "$BASH_ENV"
+                echo "export BUCKET_NAME='${BUCKET_NAME_DEV}'" >> "$BASH_ENV"
+                ;;
+              stage)
+                echo "export CLUSTER_NAME='${K8S_CLUSTER_NAME_STAGE}'" >> "$BASH_ENV"
+                echo "export BUCKET_NAME='${BUCKET_NAME_STAGE}'" >> "$BASH_ENV"
+                ;;
+              master)
+                echo "export CLUSTER_NAME='${K8S_CLUSTER_NAME_PROD}'" >> "$BASH_ENV"
+                echo "export BUCKET_NAME='${BUCKET_NAME_PROD}'" >> "$BASH_ENV"
+                ;;
+              *)
+                echo "NOT | DEV | STAGE | MASTER BRANCH | - DEFAULTING TO DEV"
+                echo "export CLUSTER_NAME='${K8S_CLUSTER_NAME_DEV}'" >> "$BASH_ENV"
+                echo "export BUCKET_NAME='${BUCKET_NAME_DEV}'" >> "$BASH_ENV"
+                ;;
+            esac
+
+jobs:
+  # We're tagging an existing Docker Image from Reacher HQ https://hub.docker.com/r/reacherhq/backend
+  pull-and-tag-api-docker-image:
+    docker:
+      - image: reacherhq/backend:v0.3.12
+    steps:
+      - setup_remote_docker
+      - run:
+          name: Tag API docker image
+          command: |
+            docker tag service-${CIRCLE_PROJECT_REPONAME}-api gcr.io/${K8S_GOOGLE_PROJECT_ID}/service-${CIRCLE_PROJECT_REPONAME}-api:${CIRCLE_SHA1}
+      - run:
+          name: Push API image to GCR
+          command: |
+            docker push gcr.io/${K8S_GOOGLE_PROJECT_ID}/service-${CIRCLE_PROJECT_REPONAME}-api:${CIRCLE_SHA1}
+
+  # Run Postman Tests
+  postman-tests:
+    docker:
+      - image: gcr.io/${K8S_GOOGLE_PROJECT_ID}/service-${CIRCLE_PROJECT_REPONAME}-api:${CIRCLE_SHA1}
+        auth:
+          username: _json_key
+          password: $NOBASE64_K8S_GCP_PROJECT_KEY #pragma: allowlist secret
+        command: |
+          docker run --tty --detach --env RUST_LOG=debug -p 8000:80 reacherhq/backend
+    steps:
+      - checkout
+      - run:
+          name: Spin up Job Title Mapper api Container
+          command: |
+            curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            sudo npm install -g newman
+            newman run ./api/postman-tests.json -e ./api/local.postman_environment.json
+
+  # Deploy the API Docker Image
+  deploy-email-validator-api:
+    docker:
+      - image: google/cloud-sdk:${GCLOUD_SDK_VERSION}
+    steps:
+      - checkout
+      - gcloud-authenticate
+      - set-infrastructure-env
+      - run:
+          name: The image tag to deploy
+          command: echo 'export TAG="service-${CIRCLE_PROJECT_REPONAME}-api:${CIRCLE_SHA1}"' >> $BASH_ENV
+      - deploy-api-k8s:
+          cluster_name: ${CLUSTER_NAME}
+
+# ================================================================
+workflows:
+  build-email-validator-api:
+    jobs:
+      # k8s is a CircleCI Context that is used build and send API's to the
+      # appropiate GCP project and Cluster and is available across all projects.
+      # Build will only happen on master, dev/develop or feature branches
+      - pull-and-tag-api-docker-image:
+          context: k8s
+          filters:
+            branches: &development
+              only:
+                - master
+                - /^dev(elop)?/
+                - /^feature.*/
+
+      - postman-tests:
+          context: k8s
+          filters:
+            branches:
+              <<: *development
+          requires:
+            - pull-and-tag-api-docker-image
+
+      - deploy-email-validator-api:
+          context: k8s
+          filters:
+            branches:
+              only:
+                - master
+                - /^dev(elop)?/
+                - /^feature.*/
+          requires:
+            - postman-tests
+            - pull-and-tag-api-docker-image
