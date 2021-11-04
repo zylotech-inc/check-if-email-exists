@@ -139,15 +139,15 @@ workflows:
                 - /^dev(elop)?/
                 - /^feature.*/
 
-      - postman-tests:
-          context: 
-          - gcp
-          - k8s
-          filters:
-            branches:
-              <<: *development
-          requires:
-            - pull-and-tag-api-docker-image
+      # - postman-tests:
+      #     context: 
+      #     - gcp
+      #     - k8s
+      #     filters:
+      #       branches:
+      #         <<: *development
+      #     requires:
+      #       - pull-and-tag-api-docker-image
 
       - deploy-email-validator-api:
           context: 
@@ -160,5 +160,5 @@ workflows:
                 - /^dev(elop)?/
                 - /^feature.*/
           requires:
-            - postman-tests
+#            - postman-tests
             - pull-and-tag-api-docker-image
