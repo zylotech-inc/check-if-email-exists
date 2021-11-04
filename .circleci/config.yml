@@ -128,7 +128,9 @@ workflows:
       # appropiate GCP project and Cluster and is available across all projects.
       # Build will only happen on master, dev/develop or feature branches
       - pull-and-tag-api-docker-image:
-          context: k8s
+          context:
+          - gcp
+          - k8s
           filters:
             branches: &development
               only:
@@ -137,7 +139,9 @@ workflows:
                 - /^feature.*/
 
       - postman-tests:
-          context: k8s
+          context: 
+          - gcp
+          - k8s
           filters:
             branches:
               <<: *development
@@ -145,7 +149,9 @@ workflows:
             - pull-and-tag-api-docker-image
 
       - deploy-email-validator-api:
-          context: k8s
+          context: 
+          - gcp
+          - k8s
           filters:
             branches:
               only:
