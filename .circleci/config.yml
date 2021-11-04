@@ -42,7 +42,7 @@ commands:
       - run:
           name: kubectl rollout status
           command: |
-            kubectl rollout status deployment/${CIRCLE_PROJECT_REPONAME}-api
+            kubectl rollout status deployment/service-${CIRCLE_PROJECT_REPONAME}-api
 
   # GCP Infractructure Specific Environment Variables
   set-infrastructure-env:
