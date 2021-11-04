@@ -77,15 +77,14 @@ jobs:
     docker:
       - image: reacherhq/backend:v0.3.12
     steps:
+      - checkout
       - setup_remote_docker
       - run:
-          name: Tag API docker image
+          name: Tag and Push API docker image
           command: |
             docker tag service-${CIRCLE_PROJECT_REPONAME}-api gcr.io/${K8S_GOOGLE_PROJECT_ID}/service-${CIRCLE_PROJECT_REPONAME}-api:${CIRCLE_SHA1}
-      - run:
-          name: Push API image to GCR
-          command: |
             docker push gcr.io/${K8S_GOOGLE_PROJECT_ID}/service-${CIRCLE_PROJECT_REPONAME}-api:${CIRCLE_SHA1}
+            
 
   # Run Postman Tests
   postman-tests:
