@@ -75,14 +75,15 @@ jobs:
   # We're tagging an existing Docker Image from Reacher HQ https://hub.docker.com/r/reacherhq/backend
   pull-and-tag-api-docker-image:
     docker:
-      - image: reacherhq/backend:v0.3.12
+      - image: google/cloud-sdk:${GCLOUD_SDK_VERSION}
     steps:
       - checkout
       - setup_remote_docker
       - run:
           name: Tag and Push API docker image
           command: |
-            docker tag service-${CIRCLE_PROJECT_REPONAME}-api gcr.io/${K8S_GOOGLE_PROJECT_ID}/service-${CIRCLE_PROJECT_REPONAME}-api:${CIRCLE_SHA1}
+            docker pull reacherhq/backend:v0.3.12
+            docker tag reacherhq/backend:v0.3.12 gcr.io/${K8S_GOOGLE_PROJECT_ID}/service-${CIRCLE_PROJECT_REPONAME}-api:${CIRCLE_SHA1}
             docker push gcr.io/${K8S_GOOGLE_PROJECT_ID}/service-${CIRCLE_PROJECT_REPONAME}-api:${CIRCLE_SHA1}
             
 
